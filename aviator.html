@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Aviator - Diamond Casino</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <style>
+        .game-bg {
+            background-image: url('https://images.pexels.com/photos/187041/pexels-photo-187041.jpeg');
+            background-size: cover;
+            background-position: center;
+        }
+        .plane {
+            position: absolute;
+            font-size: 2rem;
+            transition: all 0.1s linear;
+        }
+        .multiplier-display {
+            font-size: 3rem;
+            font-weight: bold;
+            text-shadow: 0 0 10px rgba(255, 255, 255, 0.7);
+        }
+        .bet-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 25px;
+            height: 25px;
+            border-radius: 50%;
+            background: #f59e0b;
+            cursor: pointer;
+        }
+        .multiplier-line {
+            position: absolute;
+            height: 2px;
+            background: rgba(255, 255, 255, 0.5);
+            transform-origin: left center;
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-white">
+    <!-- Header -->
+    <header class="bg-black py-4 px-6 flex justify-between items-center">
+        <div class="flex items-center space-x-2">
+            <i class="fas fa-gem text-yellow-400 text-2xl"></i>
+            <h1 class="text-xl font-bold">AVIATOR</h1>
+        </div>
+        <div class="flex items-center space-x-4">
+            <div class="flex items-center space-x-2">
+                <i class="fas fa-coins text-yellow-400"></i>
+                <span class="user-balance font-medium">₹0</span>
+            </div>
+            <a href="/lobby.html" class="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-md font-medium transition">
+                <i class="fas fa-arrow-left"></i> Lobby
+            </a>
+        </div>
+    </header>
+
+    <!-- Game Area -->
+    <section class="game-bg min-h-screen py-8 px-4">
+        <div class="max-w-4xl mx-auto">
+            <!-- Game Display -->
+            <div class="bg-black bg-opacity-70 rounded-xl p-6 mb-8">
+                <div class="relative h-64 mb-8 overflow-hidden">
+                    <!-- Flight Path -->
+                    <div id="flightPath" class="absolute inset-0">
+                        <!-- Multiplier lines will be added here dynamically -->
+                    </div>
+                    
+                    <!-- Plane -->
+                    <div id="plane" class="plane text-yellow-400">
+                        <i class="fas fa-plane"></i>
+                    </div>
+                    
+                    <!-- Multiplier Display -->
+                    <div id="multiplierDisplay" class="multiplier-display text-center absolute bottom-4 left-0 right-0">
+                        1.00x
+                    </div>
+                </div>
+                
+                <!-- Bet Controls -->
+                <div class="space-y-6">
+                    <div class="flex justify-between items-center">
+                        <span class="font-medium">Bet Amount: ₹<span id="betAmount">100</span></span>
+                        <span class="text-sm text-gray-400">Min: ₹100 | Max: ₹10,000</span>
+                    </div>
+                    <input type="range" id="betSlider" min="100" max="10000" step="100" value="100" 
+                        class="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer bet-slider">
+                    
+                    <div class="flex space-x-4">
+                        <button id="placeBetBtn" class="flex-1 py-3 px-6 bg-yellow-500 hover:bg-yellow-600 rounded-md font-bold text-lg transition">
+                            Place Bet (₹100)
+                        </button>
+                        <button id="cashOutBtn" class="flex-1 py-3 px-6 bg-green-500 hover:bg-green-600 rounded-md font-bold text-lg transition" disabled>
+                            Cash Out (1.00x)
+                        </button>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Game Info -->
+            <div class="bg-black bg-opacity-70 rounded-xl p-6">
+                <h3 class="text-xl font-bold mb-4">How to Play</h3>
+                <ul class="list-disc pl-5 space-y-2 text-gray-300">
+                    <li>Place your bet before the round starts</li>
+                    <li>Watch the plane take off - the multiplier increases as it flies</li>
+                    <li>Cash out at any time to lock in your winnings (bet amount × current multiplier)</li>
+                    <li>If you don't cash out before the plane flies away, you lose your bet</li>
+                </ul>
+            </div>
+        </div>
+    </section>
+
+    <!-- Game Result Modal (Hidden by default) -->
+    <div id="resultModal" class="fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center hidden">
+        <div class="bg-gray-800 rounded-xl p-8 max-w-md text-center">
+            <h3 class="text-2xl font-bold mb-4" id="resultTitle">You Cashed Out!</h3>
+            <p class="text-xl mb-6" id="resultMessage">You won ₹500 at 5.00x!</p>
+            <div class="flex space-x-4 justify-center">
+                <button id="playAgainBtn" class="px-6 py-3 bg-yellow-500 hover:bg-yellow-600 rounded-md font-bold transition">
+                    Play Again
+                </button>
+                <button id="backToLobbyBtn" class="px-6 py-3 bg-gray-600 hover:bg-gray-500 rounded-md font-bold transition">
+                    Back to Lobby
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+    <script>
+        // Game variables
+        let currentBet = 100;
+        let currentMultiplier = 1.0;
+        let gameState = 'waiting'; // waiting, flying, crashed
+        let flightInterval;
+        let multiplierInterval;
+        
+        // DOM elements
+        const betSlider = document.getElementById('betSlider');
+        const betAmountDisplay = document.getElementById('betAmount');
+        const placeBetBtn = document.getElementById('placeBetBtn');
+        const cashOutBtn = document.getElementById('cashOutBtn');
+        const multiplierDisplay = document.getElementById('multiplierDisplay');
+        const plane = document.getElementById('plane');
+        const flightPath = document.getElementById('flightPath');
+        const resultModal = document.getElementById('resultModal');
+        const playAgainBtn = document.getElementById('playAgainBtn');
+        const backToLobbyBtn = document.getElementById('backToLobbyBtn');
+        
+        // Initialize game
+        document.addEventListener('DOMContentLoaded', function() {
+            // Update bet amount display when slider changes
+            betSlider.addEventListener('input', function() {
+                currentBet = parseInt(this.value);
+                betAmountDisplay.textContent = currentBet;
+                placeBetBtn.textContent = `Place Bet (₹${currentBet})`;
+            });
+            
+            // Handle place bet button
+            placeBetBtn.addEventListener('click', async function() {
+                if (currentUser.balance < currentBet) {
+                    showNotification('Insufficient balance', 'error');
+                    return;
+                }
+                
+                try {
+                    const response = await fetch(`${API_BASE_URL}/aviator/bet`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${localStorage.getItem('authToken')}`
+                        },
+                        body: JSON.stringify({ amount: currentBet })
+                    });
+                    
+                    const data = await response.json();
+                    
+                    if (response.ok) {
+                        // Update UI
+                        currentUser.balance = data.newBalance;
+                        updateUIForLoggedInUser();
+                        
+                        // Start game
+                        startGame();
+                    } else {
+                        showNotification(data.message || 'Bet failed', 'error');
+                    }
+                } catch (error) {
+                    showNotification('Network error. Please try again.', 'error');
+                    console.error('Bet error:', error);
+                }
+            });
+            
+            // Handle cash out button
+            cashOutBtn.addEventListener('click', function() {
+                cashOut();
+            });
+            
+            // Handle play again button
+            playAgainBtn.addEventListener('click', function() {
+                resultModal.classList.add('hidden');
+                resetGame();
+            });
+            
+            // Handle back to lobby button
+            backToLobbyBtn.addEventListener('click', function() {
+                window.location.href = '/lobby.html';
+            });
+            
+            // Add multiplier lines
+            addMultiplierLines();
+        });
+        
+        function addMultiplierLines() {
+            const multipliers = [1.5, 2, 3, 5, 10, 20, 50, 100];
+            const pathWidth = flightPath.offsetWidth;
+            
+            multipliers.forEach(mult => {
+                const line = document.createElement('div');
+                line.className = 'multiplier-line';
+                line.style.width = `${pathWidth}px`;
+                line.style.left = '0';
+                line.style.top = `${100 - (mult * 2)}px`;
+                line.setAttribute('data-multiplier', mult);
+                
+                const label = document.createElement('div');
+                label.className = 'absolute right-0 -mr-8 -mt-3 text-xs';
+                label.textContent = `${mult}x`;
+                
+                line.appendChild(label);
+                flightPath.appendChild(line);
+            });
+        }
+        
+        function startGame() {
+            gameState = 'flying';
+            currentMultiplier = 1.0;
+            multiplierDisplay.textContent = '1.00x';
+            cashOutBtn.textContent = 'Cash Out (1.00x)';
+            cashOutBtn.disabled = false;
+            placeBetBtn.disabled = true;
+            
+            // Reset plane position
+            plane.style.left = '0px';
+            plane.style.top = '100px';
+            
+            // Start flight animation
+            let posX = 0;
+            const maxX = flightPath.offsetWidth - 40;
+            
+            flightInterval = setInterval(() => {
+                posX += 2;
+                if (posX >= maxX) {
+                    planeCrashed();
+                    return;
+                }
+                
+                plane.style.left = `${posX}px`;
+                plane.style.top = `${100 - (currentMultiplier * 2)}px`;
+            }, 20);
+            
+            // Start multiplier increase
+            multiplierInterval = setInterval(() => {
+                currentMultiplier += 0.01;
+                multiplierDisplay.textContent = currentMultiplier.toFixed(2) + 'x';
+                cashOutBtn.textContent = `Cash Out (${currentMultiplier.toFixed(2)}x)`;
+            }, 100);
+        }
+        
+        function cashOut() {
+            if (gameState !== 'flying') return;
+            
+            clearInterval(flightInterval);
+            clearInterval(multiplierInterval);
+            gameState = 'cashed';
+            
+            const winnings = Math.floor(currentBet * currentMultiplier);
+            showResult(true, winnings, currentMultiplier.toFixed(2));
+            
+            // Update balance
+            currentUser.balance += winnings;
+            updateUIForLoggedInUser();
+            
+            // TODO: Send cash out to server
+        }
+        
+        function planeCrashed() {
+            clearInterval(flightInterval);
+            clearInterval(multiplierInterval);
+            gameState = 'crashed';
+            
+            showResult(false, currentBet, currentMultiplier.toFixed(2));
+        }
+        
+        function showResult(win, amount, multiplier) {
+            const resultTitle = document.getElementById('resultTitle');
+            const resultMessage = document.getElementById('resultMessage');
+            
+            if (win) {
+                resultTitle.textContent = 'You Cashed Out!';
+                resultMessage.textContent = `You won ₹${amount} at ${multiplier}x!`;
+            } else {
+                resultTitle.textContent = 'Plane Crashed';
+                resultMessage.textContent = `You lost ₹${amount}. Better luck next time!`;
+            }
+            
+            resultModal.classList.remove('hidden');
+        }
+        
+        function resetGame() {
+            // Reset game state
+            gameState = 'waiting';
+            currentBet = 100;
+            betSlider.value = 100;
+            betAmountDisplay.textContent = '100';
+            placeBetBtn.textContent = 'Place Bet (₹100)';
+            placeBetBtn.disabled = false;
+            cashOutBtn.disabled = true;
+            
+            // Reset display
+            multiplierDisplay.textContent = '1.00x';
+            plane.style.left = '0px';
+            plane.style.top = '100px';
+        }
+    </script>
+</body>
+</html>
